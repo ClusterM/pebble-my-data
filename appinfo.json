@@ -1,12 +1,12 @@
 {
   "uuid": "9be6e663-b542-49f3-82d9-9bc174ddc63a",
   "shortName": "My Data",
-  "longName": "My Data",
+  "longName": "My Data (watchface)",
   "companyName": "bahbka",
   "versionCode": 235,
   "versionLabel": "2.3.5",
   "watchapp": {
-    "watchface": false
+    "watchface": true
   },
   "capabilities": [ "configurable", "location" ],
   "appKeys": {
@@ -23,7 +23,8 @@
     "config_location": 10,
     "config_vibrate":  11,
     "config_seconds":  12,
-    "config_shake":    13
+    "config_shake":    13,
+		"config_interval": 14
   },
   "resources": {
     "media": [

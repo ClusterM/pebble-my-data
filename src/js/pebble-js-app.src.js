@@ -23,7 +23,8 @@ var config = {
   "config_location": false,
   "config_vibrate": true,
   "config_seconds": true,
-  "config_shake": false
+  "config_shake": false,
+	"config_interval": 300
 };
 
 function extract_fields(raw) {
@@ -40,7 +41,7 @@ function extract_fields(raw) {
     "light":   INT_FIELD,
     "blink":   INT_FIELD,
     "updown":  INT_FIELD,
-    "auth":    STR_FIELD
+    "auth":    STR_FIELD,
   };
 
   var result = {};
@@ -90,26 +91,17 @@ function http_request(url) {
     if (req.readyState == 4) {
       if(req.status == 200) {
         try {
-          var response = extract_fields(JSON.parse(req.responseText));
+          //var response = extract_fields(JSON.parse(req.responseText));
           //console.log("success: " + JSON.stringify(response));
+					var response = req.responseText;
 
-          response["msg_type"] = MSG.JSON_RESPONSE;
-
-          if (response["content"] && response["content"].length > CONTENT_MAX_LENGTH) {
-            response["content"] = response["content"].substring(0, CONTENT_MAX_LENGTH);
+          if (response && response.length > CONTENT_MAX_LENGTH) {
+            response = response.substring(0, CONTENT_MAX_LENGTH);
           }
 
-          window.localStorage.setItem('pebble-my-data-response', JSON.stringify(response));
-          Pebble.sendAppMessage(response);
-
-          if (response["auth"] != null) {
-            if (response["auth"] == "") {
-              window.localStorage.removeItem('pebble-my-data-auth');
-            } else if (config["password"]) {
-              window.localStorage.setItem('pebble-my-data-auth', MD5(MD5(config["password"]) + response["auth"]));
-            }
-          }
-
+          window.localStorage.setItem('pebble-my-data-response', response);
+          //Pebble.sendAppMessage(response);
+					Pebble.sendAppMessage({ "msg_type": MSG.JSON_RESPONSE, "content": response });
         } catch(e) {
           console.log("json parse error " + e);
           Pebble.sendAppMessage({ "msg_type": MSG.ERROR });
@@ -127,35 +119,7 @@ function http_request(url) {
 }
 
 function fetch_data(url) {
-  if (config["config_location"]) {
-    if(navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        function(position) {
-          var latitude = position.coords.latitude;
-          var longitude = position.coords.longitude;
-
-          var s = (url.indexOf("?")===-1)?"?":"&";
-          http_request(url + s + 'lat=' + latitude + '&lon=' + longitude);
-        },
-        function(error) {
-          //error error.message
-          /*
-            TODO inform user about error
-            PERMISSION_DENIED (numeric value 1)
-            POSITION_UNAVAILABLE (numeric value 2)
-            TIMEOUT (numeric value 3)
-          */
-          http_request(url);
-        },
-        { maximumAge: 600000 } // 10 minutes
-      );
-    } else {
-      //error geolocation not supported
-      http_request(url);
-    }
-  } else {
-    http_request(url);
-  }
+  http_request(url);
 }
 
 Pebble.addEventListener("ready",
@@ -169,10 +133,15 @@ Pebble.addEventListener("ready",
         config = JSON.parse(json);
         //console.log("loaded config = " + JSON.stringify(config));
         config["msg_type"] = MSG.CONFIG;
+        if (("config_interval" in config) && (typeof config["config_interval"] === 'string')) {
+					config["config_interval"] = parseInt(config["config_interval"]);
+			    if (isNaN(config["config_interval"])) config["config_interval"] = 300;
+				}
+				//console.log("sending options 1 = " + JSON.stringify(config));
         Pebble.sendAppMessage(config); // send current config to pebble
 
       } catch(e) {
-        console.log("stored config json parse error");
+        console.log("stored config json parse error: " + json + ' - ' + e);
         Pebble.sendAppMessage({ "msg_type": MSG.ERROR });
       }
     }
@@ -183,8 +152,12 @@ Pebble.addEventListener("appmessage",
   function(e) {
     //console.log("received message: " + JSON.stringify(e.payload));
 
-    config["msg_type"] = MSG.CONFIG;
-    Pebble.sendAppMessage(config); // send current config to pebble
+      if (("config_interval" in config) && (typeof config["config_interval"] === 'string')) {
+				config["config_interval"] = parseInt(config["config_interval"]);
+		    if (isNaN(config["config_interval"])) config["config_interval"] = 300;
+			}
+			//console.log("sending options 2 = " + JSON.stringify(config));
+	    Pebble.sendAppMessage(config); // send current config to pebble
 
     if (config["url"]) {
       var url = config["url"];
@@ -192,7 +165,7 @@ Pebble.addEventListener("appmessage",
 
       if (e.payload["refresh"] == MSG.IN_RETRY) {
           response = window.localStorage.getItem('pebble-my-data-response');
-          Pebble.sendAppMessage(JSON.parse(response));
+					Pebble.sendAppMessage({ "msg_type": MSG.JSON_RESPONSE, "content": response });
 
       } else {
         if (e.payload["refresh"] == MSG.SELECT_SHORT_PRESS_UPDATE) {
@@ -242,7 +215,14 @@ Pebble.addEventListener("webviewclosed", function(e) {
     window.localStorage.setItem('pebble-my-data', e.response);
 
     config["msg_type"] = MSG.CONFIG;
+		//config = extract_fields(config);
     //console.log("push config = " + JSON.stringify(config));
+
+    if (("config_interval" in config) && (typeof config["config_interval"] === 'string')) {
+			config["config_interval"] = parseInt(config["config_interval"]);
+	    if (isNaN(config["config_interval"])) config["config_interval"] = 300;
+		}
+		//console.log("sending options 3 = " + JSON.stringify(config));
     Pebble.sendAppMessage(config); // send current config to pebble
 
     if (config["url"]) {

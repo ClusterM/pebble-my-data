@@ -47,12 +47,12 @@ static uint8_t blink_count;
 bool config_vibrate = true;
 bool config_seconds = false;
 bool config_shake = false;
+int config_interval = 300;
 
 bool updown = false;
 
 bool update_in_progress = false;
 
-#define DEFAULT_REFRESH 300*1000
 #define RETRY_DELAY 60*1000
 #define IN_RETRY_DELAY 100
 #define REQUEST_TIMEOUT 30*1000
@@ -80,7 +80,8 @@ enum { // AppMessage keys
   KEY_CONFIG_LOCATION,
   KEY_CONFIG_VIBRATE,
   KEY_CONFIG_SECONDS,
-  KEY_CONFIG_SHAKE
+  KEY_CONFIG_SHAKE,
+	KEY_CONFIG_INTERVAL
 };
 
 enum { // msg type
@@ -504,6 +505,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
         } else {
           config_vibrate = false;
         }
+				persist_write_bool(KEY_CONFIG_VIBRATE, config_vibrate);
       }
 
       Tuple *config_seconds_tuple = dict_find(received, KEY_CONFIG_SECONDS);
@@ -520,6 +522,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
             handle_timer_tick(NULL, MINUTE_UNIT);
           }
         }
+				persist_write_bool(KEY_CONFIG_SECONDS, config_seconds);
       }
 
       Tuple *config_shake_tuple = dict_find(received, KEY_CONFIG_SHAKE);
@@ -535,8 +538,16 @@ void in_received_handler(DictionaryIterator *received, void *context) {
             accel_tap_service_unsubscribe();
           }
         }
+				persist_write_bool(KEY_CONFIG_SHAKE, config_shake);
       }
 
+      Tuple *interval = dict_find(received, KEY_CONFIG_INTERVAL);
+      if (interval) {
+        config_interval = interval->value->uint32;
+				if (config_interval)
+		      schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
+				persist_write_int(KEY_CONFIG_INTERVAL, config_interval);
+      }
       // TODO location icon?
 
     } else if (msg_type_tuple->value->uint8 == MSG_ERROR) {
@@ -551,6 +562,7 @@ void in_received_handler(DictionaryIterator *received, void *context) {
       Tuple *content_tuple = dict_find(received, KEY_CONTENT);
       if (content_tuple) {
         memcpy(content, content_tuple->value->cstring, strlen(content_tuple->value->cstring) + 1);
+				persist_write_string(KEY_CONTENT, content);
 
         Tuple *scroll_offset_tuple = dict_find(received, KEY_SCROLL);
         uint8_t scroll_offset = DONT_SCROLL;
@@ -620,14 +632,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
         }
       }
 
-      // schedule next update
-      uint32_t delay = DEFAULT_REFRESH;
-      Tuple *refresh = dict_find(received, KEY_REFRESH);
-      if (refresh) {
-        delay = refresh->value->uint32 * 1000;
-      }
+			if (config_shake)
+				accel_tap_service_subscribe(handle_shake);			
 
-      schedule_update(delay, MSG_PERIODIC_UPDATE);
+			if (config_interval)
+	      schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
     }
   }
 }
@@ -716,6 +725,15 @@ static void click_config_provider_updown(void *context) {
 
 // prepare window!
 static void window_load(Window *window) {
+	if (persist_exists(KEY_CONFIG_VIBRATE))
+		config_vibrate = persist_read_bool(KEY_CONFIG_VIBRATE);
+	if (persist_exists(KEY_CONFIG_SECONDS))
+		config_seconds = persist_read_bool(KEY_CONFIG_SECONDS);
+	if (persist_exists(KEY_CONFIG_SHAKE))
+		config_shake = persist_read_bool(KEY_CONFIG_SHAKE);
+	if (persist_exists(KEY_CONFIG_INTERVAL))
+		config_interval = persist_read_int(KEY_CONFIG_INTERVAL);
+
   Layer *window_layer = window_get_root_layer(window);
 
   // time layers
@@ -789,8 +807,16 @@ static void window_load(Window *window) {
   bluetooth_connection_service_subscribe(&handle_bluetooth);
   handle_bluetooth(bluetooth_connection_service_peek());
 
-  tick_timer_service_subscribe(MINUTE_UNIT, handle_timer_tick);
+	if (config_seconds)
+		tick_timer_service_subscribe(SECOND_UNIT, handle_timer_tick);
+	else
+	  tick_timer_service_subscribe(MINUTE_UNIT, handle_timer_tick);
   handle_timer_tick(NULL, MINUTE_UNIT);
+	
+	if (persist_exists(KEY_CONTENT)) {
+		persist_read_string(KEY_CONTENT, content, sizeof(content));
+		update_info_layer(content, 0, DONT_SCROLL, false);
+	}
 }
 
 static void window_unload(Window *window) {
