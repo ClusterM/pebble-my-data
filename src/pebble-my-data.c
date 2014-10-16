@@ -632,9 +632,6 @@ void in_received_handler(DictionaryIterator *received, void *context) {
         }
       }
 
-			if (config_shake)
-				accel_tap_service_subscribe(handle_shake);			
-
 			if (config_interval)
 	      schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
     }
@@ -811,6 +808,8 @@ static void window_load(Window *window) {
 		tick_timer_service_subscribe(SECOND_UNIT, handle_timer_tick);
 	else
 	  tick_timer_service_subscribe(MINUTE_UNIT, handle_timer_tick);
+	if (config_shake)
+		accel_tap_service_subscribe(handle_shake);			
   handle_timer_tick(NULL, MINUTE_UNIT);
 	
 	if (persist_exists(KEY_CONTENT)) {
