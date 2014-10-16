@@ -161,10 +161,6 @@ static void request_update() {
 
   // set timeout timer
   timeout_timer = app_timer_register(REQUEST_TIMEOUT, request_timeout, NULL);
-
-	// request again later?
-	if (config_interval)
-    schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
 }
 
 // schedule request_update
@@ -172,6 +168,7 @@ static void schedule_update(uint32_t delay, uint8_t type) {
   if (!update_in_progress) {
     if (timeout_timer) {
       app_timer_cancel(timeout_timer);
+			timeout_timer = NULL;
     }
 
     if (timer) {
@@ -185,9 +182,12 @@ static void schedule_update(uint32_t delay, uint8_t type) {
 
 // reschedule update if data waiting timed out, also set update_error icon
 static void request_timeout() {
-  bitmap_layer_set_bitmap(update_icon_layer, update_error_icon_bitmap);
-  update_in_progress = false;
-  schedule_update(RETRY_DELAY, update_type);
+	if (update_in_progress)
+	{
+	  bitmap_layer_set_bitmap(update_icon_layer, update_error_icon_bitmap);
+	  update_in_progress = false;
+	  schedule_update(RETRY_DELAY, update_type);
+	}
 }
 
 // draw digit on position layer
@@ -562,7 +562,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
     } else if (msg_type_tuple->value->uint8 == MSG_JSON_RESPONSE) {
       bitmap_layer_set_bitmap(update_icon_layer, empty_icon_bitmap); // hide update icon (layer_set_hidden function sometimes works strange)
       update_in_progress = false;
-
+      if (timeout_timer) {
+	      app_timer_cancel(timeout_timer);
+				timeout_timer = NULL;
+	    }
+	
       Tuple *content_tuple = dict_find(received, KEY_CONTENT);
       if (content_tuple) {
         memcpy(content, content_tuple->value->cstring, strlen(content_tuple->value->cstring) + 1);
@@ -572,6 +576,10 @@ void in_received_handler(DictionaryIterator *received, void *context) {
         uint8_t font = 0;
         update_info_layer(content, font, scroll_offset, updown_beh);
       }
+			
+			// request again later?
+			if (config_interval)
+		    schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
     }
   }
 }
