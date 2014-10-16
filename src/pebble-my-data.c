@@ -161,6 +161,10 @@ static void request_update() {
 
   // set timeout timer
   timeout_timer = app_timer_register(REQUEST_TIMEOUT, request_timeout, NULL);
+
+	// request again later?
+	if (config_interval)
+    schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
 }
 
 // schedule request_update
@@ -563,77 +567,11 @@ void in_received_handler(DictionaryIterator *received, void *context) {
       if (content_tuple) {
         memcpy(content, content_tuple->value->cstring, strlen(content_tuple->value->cstring) + 1);
 				persist_write_string(KEY_CONTENT, content);
-
-        Tuple *scroll_offset_tuple = dict_find(received, KEY_SCROLL);
         uint8_t scroll_offset = DONT_SCROLL;
-        if (scroll_offset_tuple) {
-          scroll_offset = scroll_offset_tuple->value->uint8;
-          if (scroll_offset > 100)
-            scroll_offset = DONT_SCROLL;
-        }
-
-        Tuple *updown_tuple = dict_find(received, KEY_UPDOWN);
         bool updown_beh = false;
-        if (updown_tuple && updown_tuple->value->uint8 == 1) {
-          updown_beh = true;
-        }
-
-        Tuple *font_tuple = dict_find(received, KEY_FONT);
         uint8_t font = 0;
-        if (font_tuple) {
-          font = font_tuple->value->uint8;
-        }
-
         update_info_layer(content, font, scroll_offset, updown_beh);
       }
-
-      // maybe need to vibrate?
-      Tuple *vibrate = dict_find(received, KEY_VIBRATE);
-      if (vibrate) {
-        switch(vibrate->value->uint8) {
-          case 1:
-            vibes_short_pulse();
-            break;
-          case 2:
-            vibes_double_pulse();
-            break;
-          case 3:
-            vibes_long_pulse();
-            break;
-          default:
-            break;
-        }
-      }
-
-      // or switch theme?
-      Tuple *new_theme = dict_find(received, KEY_THEME);
-      if (new_theme) {
-        change_theme(new_theme->value->uint8);
-      }
-
-      // or turn on light?
-      Tuple *light = dict_find(received, KEY_LIGHT);
-      if (light && light->value->uint8 == 1) {
-        light_enable_interaction();
-      }
-
-      // or blink content?
-      Tuple *blink = dict_find(received, KEY_BLINK);
-      if (blink) {
-        if (blink->value->uint8 > 0) {
-          if (blink->value->uint8 > BLINK_MAX) {
-            blink_count = BLINK_MAX;
-          } else {
-            blink_count = blink->value->uint8 * 2;
-          }
-
-          blink_theme_save = theme;
-          blink_info();
-        }
-      }
-
-			if (config_interval)
-	      schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
     }
   }
 }
@@ -810,6 +748,8 @@ static void window_load(Window *window) {
 	  tick_timer_service_subscribe(MINUTE_UNIT, handle_timer_tick);
 	if (config_shake)
 		accel_tap_service_subscribe(handle_shake);			
+	if (config_interval)
+		schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
   handle_timer_tick(NULL, MINUTE_UNIT);
 	
 	if (persist_exists(KEY_CONTENT)) {
