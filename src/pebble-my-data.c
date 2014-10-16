@@ -150,6 +150,8 @@ static void request_update() {
   bitmap_layer_set_bitmap(update_icon_layer, update_icon_bitmap);
   update_in_progress = true;
 
+  app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
+
   // prepare request
   DictionaryIterator *send_message;
   app_message_outbox_begin(&send_message);
@@ -581,6 +583,8 @@ void in_received_handler(DictionaryIterator *received, void *context) {
 			if (config_interval)
 		    schedule_update(config_interval*1000, MSG_PERIODIC_UPDATE);
     }
+
+	  app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL);
   }
 }
 
